@@ -1,9 +1,9 @@
 //
 //  AppDelegate.swift
-//  Exercicio04
+//  Calculator
 //
-//  Created by user151751 on 3/28/19.
-//  Copyright © 2019 user151751. All rights reserved.
+//  Created by Marcilio Junior on 26/03/19.
+//  Copyright © 2019 PUC. All rights reserved.
 //
 
 import UIKit
