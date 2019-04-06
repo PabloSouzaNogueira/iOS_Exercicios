@@ -108,22 +108,17 @@ class ViewController: UIViewController {
     /// Metódo responsável por escolhe qual a operação será realizada.
     /// - Parameter sender: Referência do botão de operação que foi tocado
     @objc func operationTap(sender: UIButton) {
-        if resultLabel.text != "+" && resultLabel.text != "-" && resultLabel.text != "*" && resultLabel.text != "/" {
-            firstValue = Int(resultLabel.text!)!
-        }
-            
+
+        firstValue = Int(resultLabel.text!)!
+        
         switch sender {
             case sumOpButton:
-                resultLabel.text = "+"
                 operation = Calculator.Operation.sum
             case subtractOpButton:
-                resultLabel.text = "-"
                 operation = Calculator.Operation.subtract
             case timesOpButton:
-                resultLabel.text = "*"
                 operation = Calculator.Operation.times
             case divideOpButton:
-                resultLabel.text = "/"
                 operation = Calculator.Operation.divide
             default:
                 return
