@@ -8,16 +8,19 @@
 
 import UIKit
 
-struct Todo {
+struct Todo: Codable {
+    let id: Int?
     let task: String
     var isCompleted: Bool
     
-    init(task:String){
+    init(task:String, id: Int?){
+        self.id = id
         self.task = task
         self.isCompleted = false
     }
 }
 
+//curl -X "POST" "https://puc-dam-todolist.herokuapp.com/token" -H 'Content-Type: application/json; charset=utf-8' -d $'{"user": "LA223", "password": "LA223"}'
 
 
 class ViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
@@ -25,20 +28,28 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
     
     
     @IBOutlet weak var tableView: UITableView!
+    let todoRepository = TodoRepository(network: NetworkService(baseUrl: "https://puc-dam-todolist.herokuapp.com"), token: "DqSUcrHJTlQ4WMvGI1AKOKT48GQTmFuFaPM5iJYTatA=")
     
     var items: [Todo] = [
-        Todo(task: "Terminar exercícios de iOS"),
-        Todo(task: "Trocar android por iPhone"),
-        Todo(task: "Comprar um Macbook")
+        //Todo(task: "Terminar exercícios de iOS", id:1),
+        //Todo(task: "Trocar android por iPhone", id:1),
+        //Todo(task: "Comprar um Macbook", id:1)
     ]
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        tableView.dataSource = self
-        tableView.delegate = self
-        tableView.register(TodoItemCell.self, forCellReuseIdentifier: "todoItem")
-        // Do any additional setup after loading the view.
+        todoRepository.all{ (result) in
+            switch result{
+                case .success(let todos):
+                    self.items = todos
+                    self.tableView.dataSource = self
+                    self.tableView.delegate = self
+                    self.tableView.register(TodoItemCell.self, forCellReuseIdentifier: "todoItem")
+                case .error:
+                    self.items.removeAll(keepingCapacity: false)
+            }
+        }
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -54,18 +65,23 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         return cell
     }
     
-    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        items[indexPath.row].isCompleted = items[indexPath.row].isCompleted ? false : true
+    /*func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        //items[indexPath.row].isCompleted = items[indexPath.row].isCompleted ? false : true
         
-        let itemTemp = items[indexPath.row]
-        
-        items.remove(at: indexPath.row)
-        items.insert(itemTemp, at: indexPath.row)
-        
-        //tableView.reloadData()
-        
-        tableView.reloadRows(at: [indexPath], with: .fade)
-    }
+        self.todoRepository.toggleComplete(id: self.items[indexPath.row].id!, callback: { (result) in
+            switch result{
+                case .success(let todo):
+                    //let itemTemp = self.items[indexPath.row]
+                    self.items.remove(at: indexPath.row)
+                    self.items.insert(todo, at: indexPath.row)
+                case .error:
+                    self.items.removeAll(keepingCapacity: false)
+                }
+            
+            self.tableView.reloadRows(at: [indexPath], with: .fade)
+        })
+     
+    }*/
     
     func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
         
@@ -74,9 +90,17 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
             title: "Remover",
             handler: {(action, view, completionHandler) in
                 
-                self.items.remove(at: indexPath.row)
-                self.tableView.reloadData()
-                completionHandler(true)
+                self.todoRepository.delete(id: self.items[indexPath.row].id!) { (result) in
+                    switch result{
+                        case .success:
+                            self.items.remove(at: indexPath.row)
+                            self.tableView.reloadData()
+                        case .error:
+                            self.items.removeAll(keepingCapacity: false)
+                    }
+                    
+                    completionHandler(true)
+                }
             })
         
         let swipeConfiguration = UISwipeActionsConfiguration(actions: [removeAction])
@@ -91,23 +115,32 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
             title: self.items[indexPath.row].isCompleted ? "Desmarcar" : "Marcar",
             handler: {(action, view, completionHandler) in
                 
-                self.items[indexPath.row].isCompleted = self.items[indexPath.row].isCompleted ? false : true
+                self.todoRepository.toggleComplete(id: self.items[indexPath.row].id!, callback: { (result) in
+                    switch result{
+                        case .success(let todo):
+                            self.items.remove(at: indexPath.row)
+                            self.items.insert(todo, at: indexPath.row)
+                            self.tableView.reloadRows(at: [indexPath], with: .fade)
+                        case .error:
+                            self.items.removeAll(keepingCapacity: false)
+                    }
+                    
+                    completionHandler(true)
+                })
                 
-                let itemTemp = self.items[indexPath.row]
+                //self.items[indexPath.row].isCompleted = self.items[indexPath.row].isCompleted ? false : true
                 
-                self.items.remove(at: indexPath.row)
-                self.items.insert(itemTemp, at: indexPath.row)
+                //let itemTemp = self.items[indexPath.row]
+                //self.items.remove(at: indexPath.row)
+                //self.items.insert(itemTemp, at: indexPath.row)
                 
-                //tableView.reloadData()
-                tableView.reloadRows(at: [indexPath], with: .fade)
-                completionHandler(true)
+                //tableView.reloadRows(at: [indexPath], with: .fade)
         })
         
         let swipeConfiguration = UISwipeActionsConfiguration(actions: [removeAction])
         
         return swipeConfiguration
     }
-    
     
     
     @IBAction func adicionarItem(_ sender: Any) {
@@ -120,8 +153,16 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         let okAction = UIAlertAction(title: "OK", style: .default, handler: {
             _ in guard let task = alertController.textFields?.first?.text else { return }
             
-            self.items.append(Todo(task: task))
-            self.tableView.reloadData()
+            self.todoRepository.create(taskTitle: task, callback: { (result) in
+                switch result{
+                    case .success(let todo):
+                        self.items.append(todo)
+                        self.tableView.reloadData()
+                    case .error:
+                        self.items.removeAll(keepingCapacity: false)
+                }
+            })
+            
         })
         
         let cancelAction = UIAlertAction(title: "Cancelar", style: .cancel, handler: nil)
@@ -130,7 +171,6 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         alertController.addAction(cancelAction)
         
         present(alertController, animated: true, completion: nil)
-        
     }
 
 }
