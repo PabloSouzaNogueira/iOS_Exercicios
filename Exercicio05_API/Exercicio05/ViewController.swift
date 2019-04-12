@@ -9,40 +9,41 @@
 import UIKit
 
 struct Todo: Codable {
+    let id: Int?
     let task: String
     var isCompleted: Bool
     
-    init(task:String){
+    init(task:String, id: Int?){
+        self.id = id
         self.task = task
         self.isCompleted = false
     }
 }
 
-
+//curl -X "POST" "https://puc-dam-todolist.herokuapp.com/token" -H 'Content-Type: application/json; charset=utf-8' -d $'{"user": "LA223", "password": "LA223"}'
 
 
 class ViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
     
-    
-    
     @IBOutlet weak var tableView: UITableView!
-
+    let todoRepository = TodoRepository(network: NetworkService(baseUrl: "https://puc-dam-todolist.herokuapp.com"), token: "DqSUcrHJTlQ4WMvGI1AKOKT48GQTmFuFaPM5iJYTatA=")
     
-    var items: [Todo] = [
-        Todo(task: "Terminar exercícios de iOS"),
-        Todo(task: "Trocar android por iPhone"),
-        Todo(task: "Comprar um Macbook")
-    ]
+    var items: [Todo] = []
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        
         self.tableView.dataSource = self
         self.tableView.delegate = self
         self.tableView.register(TodoItemCell.self, forCellReuseIdentifier: "todoItem")
-        
-        //self.tableView.reloadData()
-        
+        todoRepository.all{ (result) in
+            switch result{
+                case .success(let todos):
+                    self.items = todos
+                    self.tableView.reloadData()
+                case .error:
+                    self.presentAlert(withTitle: "Erro", message: "Ops ocorreu um erro!")
+            }
+        }
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -58,16 +59,6 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         return cell
     }
     
-    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        items[indexPath.row].isCompleted = items[indexPath.row].isCompleted ? false : true
-        
-        let itemTemp = self.items[indexPath.row]
-        self.items.remove(at: indexPath.row)
-        self.items.insert(itemTemp, at: indexPath.row)
-        
-        self.tableView.reloadRows(at: [indexPath], with: .fade)
-    }
-    
     func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
         
         let removeAction = UIContextualAction(
@@ -75,10 +66,17 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
             title: "Remover",
             handler: {(action, view, completionHandler) in
                 
-                self.items.remove(at: indexPath.row)
-                self.tableView.reloadData()
-                
-                completionHandler(true)
+                self.todoRepository.delete(id: self.items[indexPath.row].id!) { (result) in
+                    switch result{
+                        case .success:
+                            self.items.remove(at: indexPath.row)
+                            self.tableView.reloadData()
+                        case .error:
+                            self.presentAlert(withTitle: "Erro", message: "Ops ocorreu um erro!")
+                    }
+                    
+                    completionHandler(true)
+                }
             })
         
         let swipeConfiguration = UISwipeActionsConfiguration(actions: [removeAction])
@@ -93,14 +91,19 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
             title: self.items[indexPath.row].isCompleted ? "Desmarcar" : "Marcar",
             handler: {(action, view, completionHandler) in
                 
-                self.items[indexPath.row].isCompleted = self.items[indexPath.row].isCompleted ? false : true
-                
-                let itemTemp = self.items[indexPath.row]
-                self.items.remove(at: indexPath.row)
-                self.items.insert(itemTemp, at: indexPath.row)
-                tableView.reloadRows(at: [indexPath], with: .fade)
-                
-                completionHandler(true)
+                self.todoRepository.toggleComplete(id: self.items[indexPath.row].id!, callback: { (result) in
+                    switch result{
+                        case .success(let todo):
+                            self.items.remove(at: indexPath.row)
+                            self.items.insert(todo, at: indexPath.row)
+                            self.tableView.reloadRows(at: [indexPath], with: .fade)
+                        case .error:
+                            self.presentAlert(withTitle: "Erro", message: "Ops ocorreu um erro!")
+                    }
+                    
+                    completionHandler(true)
+                })
+            
         })
         
         let swipeConfiguration = UISwipeActionsConfiguration(actions: [removeAction])
@@ -119,8 +122,16 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         let okAction = UIAlertAction(title: "OK", style: .default, handler: {
             _ in guard let task = alertController.textFields?.first?.text else { return }
             
-            self.items.append(Todo(task: task))
-            self.tableView.reloadData()
+            self.todoRepository.create(taskTitle: task, callback: { (result) in
+                switch result{
+                    case .success(let todo):
+                        self.items.append(todo)
+                        self.tableView.reloadData()
+                    case .error:
+                        self.presentAlert(withTitle: "Erro", message: "Ops ocorreu um erro!")
+                }
+            })
+            
         })
         
         let cancelAction = UIAlertAction(title: "Cancelar", style: .cancel, handler: nil)
@@ -130,6 +141,18 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         
         present(alertController, animated: true, completion: nil)
     }
+    
 }
 
 
+extension UIViewController {
+    
+    func presentAlert(withTitle title: String, message : String) {
+        let alertController = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        let OKAction = UIAlertAction(title: "OK", style: .default) { action in
+            print("You've pressed OK Button")
+        }
+        alertController.addAction(OKAction)
+        self.present(alertController, animated: true, completion: nil)
+    }
+}
